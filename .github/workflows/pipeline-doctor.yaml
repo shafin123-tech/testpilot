@@ -1,0 +1,36 @@
+name: Pipeline Doctor
+
+on:
+  workflow_dispatch:
+
+jobs:
+  analyze-pipeline:
+    runs-on: [self-hosted, linux, x64]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Start pipeline event server
+        run: |
+          python3 -m http.server 8000 > pipeline-server.log 2>&1 &
+          echo $! > pipeline-server.pid
+          sleep 2
+
+      - name: Verify pipeline event
+        run: |
+          curl --fail http://localhost:8000/pipeline_event.json
+
+      - name: Run Pipeline Doctor
+        run: |
+          docker compose run --rm --build pipeline-doctor
+
+      - name: Show analysis report
+        run: |
+          python3 -m json.tool output/pipeline_analysis.json
+
+      - name: Upload analysis report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-analysis
+          path: output/pipeline_analysis.json
