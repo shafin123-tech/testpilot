@@ -1,5 +1,9 @@
 .venv/
 .venv-test/
+.vscode/
 __pycache__/
 *.pyc
+*.log
+output/
 pipeline_analysis.json
+my_pipeline_report.json
