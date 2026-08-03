@@ -1,0 +1,24 @@
+{
+  "pipeline_id": 4812,
+  "repository": "payment-service",
+  "status": "failed",
+  "jobs": [
+    {
+      "name": "unit-tests",
+      "status": "passed",
+      "duration_seconds": 48
+    },
+    {
+      "name": "docker-build",
+      "status": "failed",
+      "duration_seconds": 32,
+      "log": "COPY failed: requirements.txt not found"
+    },
+    {
+      "name": "integration-tests",
+      "status": "failed",
+      "duration_seconds": 61,
+      "log": "Connection refused: database:5432"
+    }
+  ]
+}

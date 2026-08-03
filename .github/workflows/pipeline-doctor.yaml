@@ -11,6 +11,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Simulate Docker build failure
+        id: docker_build
+        continue-on-error: true
+        run: |
+          echo "COPY failed: requirements.txt not found" > docker-build.log
+          exit 1
+
+      - name: Simulate integration test failure
+        id: integration_tests
+        continue-on-error: true
+        run: |
+          echo "Connection refused: database:5432" > integration-tests.log
+          exit 1
+
+      - name: Create pipeline event
+        run: |
+          cat > pipeline_event.json <<EOF
+          {
+            "pipeline_id": "${{ github.run_id }}",
+            "repository": "${{ github.repository }}",
+            "status": "failed",
+            "jobs": [
+              {
+                "name": "docker-build",
+                "status": "failed",
+                "log": "$(cat docker-build.log)"
+              },
+              {
+                "name": "integration-tests",
+                "status": "failed",
+                "log": "$(cat integration-tests.log)"
+              }
+            ]
+          }
+          EOF
+
+      - name: Show generated pipeline event
+        run: |
+          python3 -m json.tool pipeline_event.json
+
       - name: Start pipeline event server
         run: |
           python3 -m http.server 8000 > pipeline-server.log 2>&1 &
