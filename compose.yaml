@@ -1,13 +1,15 @@
 services:
-  pipeline-doctor:
+  pipeline-doctor-api:
     build: .
-    image: pipeline-doctor:1.0
+    image: pipeline-doctor-api:1.0
+
+    ports:
+      - "8080:8080"
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
     environment:
-      PIPELINE_URL: "http://host.docker.internal:8000/pipeline_event.json"
       OLLAMA_URL: "http://host.docker.internal:11434/api/chat"
       MODEL: "qwen2.5-coder:7b"
       OUTPUT_FILE: "/output/pipeline_analysis.json"

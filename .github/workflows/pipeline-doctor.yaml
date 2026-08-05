@@ -11,66 +11,63 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Simulate Docker build failure
-        id: docker_build
-        continue-on-error: true
+      - name: Create output directory
         run: |
-          echo "COPY failed: requirements.txt not found" > docker-build.log
+          mkdir -p output
+
+      - name: Start Pipeline Doctor API
+        run: |
+          docker compose up -d --build
+
+      - name: Show container status
+        run: |
+          docker compose ps
+
+      - name: Wait for API health
+        run: |
+          for i in {1..30}
+          do
+            if curl --fail http://localhost:8080/health
+            then
+              echo "Pipeline Doctor API is healthy"
+              exit 0
+            fi
+
+            echo "Waiting for Pipeline Doctor API..."
+            sleep 2
+          done
+
+          echo "Pipeline Doctor API did not become healthy"
+          docker compose logs
           exit 1
 
-      - name: Simulate integration test failure
-        id: integration_tests
-        continue-on-error: true
+      - name: Send pipeline event
         run: |
-          echo "Connection refused: database:5432" > integration-tests.log
-          exit 1
+          curl --fail --silent \
+            -X POST \
+            http://localhost:8080/analyze \
+            -H "Content-Type: application/json" \
+            --data @pipeline_event.json \
+            --output output/api_response.json
 
-      - name: Create pipeline event
+      - name: Show API response
         run: |
-          cat > pipeline_event.json <<EOF
-          {
-            "pipeline_id": "${{ github.run_id }}",
-            "repository": "${{ github.repository }}",
-            "status": "failed",
-            "jobs": [
-              {
-                "name": "docker-build",
-                "status": "failed",
-                "log": "$(cat docker-build.log)"
-              },
-              {
-                "name": "integration-tests",
-                "status": "failed",
-                "log": "$(cat integration-tests.log)"
-              }
-            ]
-          }
-          EOF
+          python3 -m json.tool output/api_response.json
 
-      - name: Show generated pipeline event
-        run: |
-          python3 -m json.tool pipeline_event.json
-
-      - name: Start pipeline event server
-        run: |
-          python3 -m http.server 8000 > pipeline-server.log 2>&1 &
-          echo $! > pipeline-server.pid
-          sleep 2
-
-      - name: Verify pipeline event
-        run: |
-          curl --fail http://localhost:8000/pipeline_event.json
-
-      - name: Run Pipeline Doctor
-        run: |
-          docker compose run --rm --build pipeline-doctor
-
-      - name: Show analysis report
+      - name: Show saved analysis report
         run: |
           python3 -m json.tool output/pipeline_analysis.json
 
-      - name: Upload analysis report
+      - name: Upload analysis reports
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-analysis
-          path: output/pipeline_analysis.json
+          path: |
+            output/api_response.json
+            output/pipeline_analysis.json
+
+      - name: Stop services
+        if: always()
+        run: |
+          docker compose logs
+          docker compose down

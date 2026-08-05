@@ -35,6 +35,8 @@ OUTPUT_FILE = os.getenv(
     "pipeline_analysis.json",
 )
 
+
+
 def classify_failure(log):
     log_lower = log.lower()
 
@@ -251,6 +253,7 @@ def main():
     "results": analyzed_jobs,
 }
     write_analysis_report(report, OUTPUT_FILE)
+   
 
     print("Analysis completed")
     print("report type", type(report))
