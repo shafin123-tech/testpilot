@@ -1,0 +1,7 @@
+[INFO] Starting Docker build
+[INFO] Step 1/8 : FROM python:3.12-slim
+[INFO] Step 2/8 : WORKDIR /app
+[INFO] Step 3/8 : COPY requirements.txt .
+[ERROR] COPY failed: requirements.txt not found
+[ERROR] Docker build failed
+[INFO] Pipeline finished with status failed
