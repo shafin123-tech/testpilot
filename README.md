@@ -1,79 +1,182 @@
 # Pipeline Doctor
 
-Pipeline Doctor is a CI failure-analysis prototype built with Python, Docker, GitHub Actions, and a local Ollama LLM.
+**AI-assisted CI failure investigation that turns failed pipeline evidence into a structured troubleshooting report.**
 
-It reads a pipeline event, extracts failed jobs, classifies known failure patterns, asks an LLM for a structured investigation, and generates a final JSON analysis report.
+Pipeline Doctor is a Python-based CI reliability prototype designed to reduce the manual effort required to investigate failed CI pipelines.
 
-When executed through GitHub Actions, the generated report is uploaded as a workflow artifact.
+The application receives pipeline failure data, identifies failed jobs, classifies known failure patterns, analyzes the available evidence, and produces a structured troubleshooting report containing likely causes and practical next steps.
 
-## Problem
+> **Current status:** Pipeline Doctor works locally and through a self-hosted GitHub Actions workflow. It is not currently a public production service.
 
-CI failures often require engineers to manually inspect logs and identify the likely root cause.
+---
 
-Pipeline Doctor helps by producing an initial investigation report containing:
+## Why I Built It
 
-- failure category
-- summary of what failed
-- likely root cause
-- practical troubleshooting suggestions
+CI failures can come from many different sources, including:
 
-The tool is designed to assist engineers, not replace human investigation.
+- missing files during container builds
+- unavailable dependent services
+- configuration problems
+- permission failures
+- failing automated tests
+- infrastructure or network problems
+
+Engineers often begin troubleshooting by manually searching logs, checking configuration files, and trying to identify which evidence is relevant.
+
+Pipeline Doctor explores how part of this investigation can be automated while keeping the result evidence-based and understandable to an engineer.
+
+The goal is not to replace engineering judgement.
+
+The goal is to reduce the initial effort required to answer:
+
+```text
+What failed?
+Why might it have failed?
+What evidence supports that conclusion?
+What should I check next?
+```
+
+---
+
+## What the Current Prototype Does
+
+The current working prototype can:
+
+- receive a CI pipeline event through a FastAPI service
+- identify failed pipeline jobs
+- classify known failure patterns using deterministic Python rules
+- use a local Ollama/Qwen model to generate structured troubleshooting guidance
+- run inside Docker and Docker Compose
+- execute through a self-hosted GitHub Actions workflow
+- generate a JSON analysis report and upload it as a CI artifact
+
+Pipeline Doctor currently recognizes example failure categories such as:
+
+```text
+docker_build
+connection
+permission
+test_failure
+unknown
+```
+
+---
+
+## Example Result
+
+A failed CI job such as:
+
+```text
+Docker build failed
+COPY failed: requirements.txt not found
+```
+
+can produce an investigation result such as:
+
+```text
+Failure category:
+docker_build
+
+Summary:
+Docker could not access requirements.txt during the image build.
+
+Likely cause:
+The file may not be available in the Docker build context
+or the COPY path may be incorrect.
+
+Suggested checks:
+- verify the Docker build context
+- inspect the Dockerfile COPY path
+- confirm the required file is available during the build
+```
+
+The generated result is also stored as structured JSON for use by CI workflows and other automation.
+
+---
 
 ## Architecture
 
+![Pipeline Doctor architecture](docs/images/pipeline-doctor-architecture.png)
+
+The current architecture connects GitHub Actions, a self-hosted runner, Docker Compose, the FastAPI service, deterministic failure classification, local Ollama analysis, and the generated CI artifact.
+
+---
+
+## Experimental Manual Agent
+
+![Manual agent flow](docs/images/manual-agent-flow.png)
+
+The repository also contains a separate experimental troubleshooting agent under:
+
 ```text
-GitHub Actions
-      |
-      | sends workflow job
-      v
-Self-hosted Linux runner
-      |
-      | starts local pipeline event server
-      v
-pipeline_event.json on port 8000
-      |
-      | HTTP GET
-      v
-Pipeline Doctor Docker container
-      |
-      +----> Python rule-based classification
-      |
-      +----> Ollama API on port 11434
-      |
-      v
-pipeline_analysis.json
-      |
-      | upload-artifact
-      v
-GitHub Actions artifact
+manual_agent/
 ```
+
+The agent was built manually in Python to understand how tool-based agent loops work before introducing an agent framework.
+
+It currently has three read-only tools:
+
+```text
+search_log(keyword)
+read_file(path)
+list_files(directory)
+```
+
+The agent can:
+
+- receive a CI failure problem
+- choose which investigation tool to use
+- execute the tool through Python
+- receive the tool result as evidence
+- decide whether more investigation is needed
+- produce a structured final diagnosis
+
+The manual agent also includes:
+
+- bounded execution using `max_steps`
+- duplicate tool-call detection
+- project-root path restrictions
+- conversation history
+- evidence-based reasoning rules
+
+> The manual agent is currently separate from the main FastAPI Pipeline Doctor flow and is not yet fully integrated.
+
+---
 
 ## GitHub Actions Workflow
 
 The workflow runs Pipeline Doctor on a self-hosted Linux runner.
 
-The current execution flow is:
+The current flow is:
 
 ```text
 Checkout repository
         |
         v
-Start pipeline event HTTP server
+Configure container user
         |
         v
-Verify pipeline_event.json
+Create output directory
         |
         v
-Build and run Pipeline Doctor container
+Build and start services
+with Docker Compose
         |
         v
-Analyze failed jobs
+Wait for /health
         |
         v
-Generate pipeline_analysis.json
+POST pipeline_event.json
+to /analyze
         |
         v
-Upload analysis report as artifact
+Generate analysis report
+        |
+        v
+Upload report as artifact
+        |
+        v
+Stop services
 ```
 
 ### Trigger
@@ -87,9 +190,11 @@ on:
 
 This means pushing code does not automatically execute Pipeline Doctor. The workflow is started manually from GitHub Actions.
 
+---
+
 ## Pipeline Event
 
-For the current prototype, Pipeline Doctor uses a sample pipeline event.
+The current prototype uses synthetic pipeline data.
 
 Example:
 
@@ -118,11 +223,11 @@ Example:
 }
 ```
 
-Pipeline Doctor extracts only the failed jobs and sends their failure information for analysis.
+Pipeline Doctor extracts the failed jobs and analyzes them individually.
 
-## Example Analysis
+---
 
-A failed Docker build can produce an analysis such as:
+## Example Structured Analysis
 
 ```json
 {
@@ -132,113 +237,182 @@ A failed Docker build can produce an analysis such as:
   "analysis_status": "success",
   "analysis": {
     "summary": "The Docker build could not find requirements.txt.",
-    "likely_root_cause": "The file is missing from the build context or the COPY path is incorrect.",
+    "likely_root_cause": "The file may be outside the Docker build context or the COPY path may be incorrect.",
     "suggestions": [
-      "Verify that requirements.txt exists.",
-      "Check the Dockerfile COPY path.",
-      "Inspect the Docker build context."
+      "Verify that requirements.txt is available in the Docker build context.",
+      "Inspect the Dockerfile COPY instruction.",
+      "Verify the directory used when executing docker build."
     ]
   }
 }
 ```
 
+---
+
 ## Run Locally
 
-### 1. Start the sample pipeline event server
+### Prerequisites
 
-From the project directory:
-
-```bash
-python3 -m http.server 8000
-```
-
-The sample pipeline event is then available on port `8000`.
-
-### 2. Make sure Ollama is running
-
-Pipeline Doctor currently uses:
+The current setup requires:
 
 ```text
+Python
+Docker
+Docker Compose
+Ollama
 qwen2.5-coder:7b
 ```
 
-through the local Ollama API on port `11434`.
-
-### 3. Run Pipeline Doctor with Docker Compose
+Check that Ollama is running:
 
 ```bash
-docker compose run --rm --build pipeline-doctor
+ollama list
 ```
 
-Docker Compose configures the container so it can communicate with the pipeline event server and Ollama running on the host machine.
-
-### 4. Check the generated report
+Start Pipeline Doctor:
 
 ```bash
-python3 -m json.tool output/pipeline_analysis.json
+docker compose up --build
 ```
 
-The report contains the failed jobs and their generated analysis.
+Check the FastAPI health endpoint:
 
-## Current Prototype Scope
+```bash
+curl http://localhost:8080/health
+```
 
-The current implementation focuses on demonstrating the complete CI failure-analysis flow:
+Expected response:
+
+```json
+{
+  "status": "healthy"
+}
+```
+
+Send the sample pipeline event:
+
+```bash
+curl --fail   -X POST   http://localhost:8080/analyze   -H "Content-Type: application/json"   --data @pipeline_event.json
+```
+
+The analysis report is written to the configured output location.
+
+---
+
+## Repository Structure
 
 ```text
-Pipeline event
-      ↓
-Failed-job extraction
-      ↓
-Failure classification
-      ↓
-LLM analysis
-      ↓
-Structured JSON report
-      ↓
-GitHub Actions artifact
+testpilot/
+├── .github/
+│   └── workflows/
+│       └── pipeline-doctor.yaml
+│
+├── docs/
+│   ├── architecture.md
+│   ├── workflow.md
+│   └── images/
+│       ├── pipeline-doctor-architecture.png
+│       └── manual-agent-flow.png
+│
+├── examples/
+│   └── pipeline_event.json
+│
+├── manual_agent/
+│   ├── agent.py
+│   ├── prompts.py
+│   ├── sample_log.txt
+│   └── tools.py
+│
+├── api.py
+├── pipeline_doctor.py
+├── pipeline_event.json
+├── Dockerfile
+├── compose.yaml
+├── requirements.txt
+└── README.md
 ```
+
+---
 
 ## Technologies Used
 
-- **Python** — pipeline event processing, failed-job extraction, failure classification, and LLM integration
-- **Requests** — communication with the pipeline event server and Ollama API
+- **Python** — CI failure processing and automation
+- **FastAPI** — REST API
+- **Requests** — HTTP communication
 - **Ollama** — local LLM runtime
-- **Qwen2.5-Coder 7B** — analyzes CI failure logs and generates troubleshooting suggestions
-- **Docker** — packages Pipeline Doctor into a reproducible container
-- **Docker Compose** — configures and runs the container locally
-- **GitHub Actions** — executes the analysis workflow
-- **Self-hosted GitHub Actions Runner** — runs the workflow with access to local Docker and Ollama
-- **JSON** — pipeline event input and structured analysis output
-- **Python HTTP Server** — temporarily serves the sample pipeline event during the prototype stage
+- **Qwen2.5-Coder 7B** — structured troubleshooting guidance
+- **Docker** — application container
+- **Docker Compose** — local orchestration
+- **GitHub Actions** — CI workflow
+- **Self-hosted GitHub Actions Runner** — local workflow execution
+- **JSON** — pipeline input and structured output
+- **Manual Python Agent Loop** — experimental evidence-gathering workflow
+
+---
 
 ## Current Limitations
 
-Pipeline Doctor is currently a working prototype rather than a production-ready system.
+Pipeline Doctor is a working prototype rather than a production-ready system.
 
 Current limitations include:
 
-- The pipeline event is currently a static sample rather than being generated from a real CI failure.
-- The pipeline event is served using Python's temporary HTTP file server.
-- Ollama and the LLM run locally.
-- There is currently no API authentication or authorization.
-- CI logs are not scanned or redacted for secrets before LLM analysis.
-- LLM output validation is limited.
-- There is no retry strategy for failed API or LLM requests.
-- Large CI logs are not currently truncated or split into smaller sections.
-- The generated analysis report is currently JSON only.
-- The workflow currently uses a self-hosted runner and requires the local supporting services to be available.
+- pipeline input is still synthetic
+- GitHub Actions evidence is not yet collected directly
+- the manual agent is not yet integrated into the main API flow
+- API authentication is not implemented
+- secret redaction is not yet complete
+- LLM output validation is limited
+- retry handling is limited
+- large-log handling is not yet implemented
+- analysis output is currently JSON-focused
+- deployment currently depends on a self-hosted runner and local Ollama
 
-## Planned Improvements
+---
 
-Future improvements include:
+## Next Improvements
 
-- Replace the temporary Python HTTP server with FastAPI.
-- Accept pipeline events through an API or webhook.
-- Collect real failure information from GitHub Actions, Jenkins, or GitLab pipelines.
-- Add schema validation for pipeline events and LLM responses.
-- Redact secrets and sensitive information before sending logs to the LLM.
-- Add retry and improved timeout handling for external requests.
-- Add support for large logs through truncation or relevant-log extraction.
-- Generate human-readable Markdown investigation reports in addition to JSON.
-- Add automated unit and integration tests.
-- Improve error handling and observability.
+The next steps are intentionally incremental:
+
+- add reliable unit and API tests
+- add Pydantic request and response models
+- improve structured logging
+- add secret redaction
+- add safer LLM error handling
+- integrate real GitHub Actions failure evidence
+- integrate the manual agent into the main Pipeline Doctor flow
+- generate a visual HTML report
+- add a short README demo GIF
+- deploy a production-style version after the prototype is stable
+
+---
+
+## Engineering Principles
+
+- evidence before speculation
+- deterministic checks before LLM reasoning where appropriate
+- read-only investigation tools by default
+- bounded agent execution
+- synthetic project data only
+- no employer-confidential code or logs
+- automated testing before infrastructure expansion
+- small incremental changes
+- AI assists engineers rather than replacing engineering judgement
+
+---
+
+## Portfolio Goal
+
+Pipeline Doctor is designed to demonstrate practical engineering across:
+
+- test automation
+- CI/CD reliability
+- Python backend development
+- API testing
+- failure investigation
+- containerisation
+- agentic AI fundamentals
+- cloud-native engineering
+
+The emphasis is not on adding technologies for their own sake.
+
+Each feature should solve a clear reliability, testing, or troubleshooting problem and produce a result that can be demonstrated and verified.
