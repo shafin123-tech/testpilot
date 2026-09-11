@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline Doctor</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <main class="dashboard">
+
+        <header class="topbar">
+            <div>
+                <h1>Pipeline Doctor</h1>
+                <p>AI-assisted CI failure investigation</p>
+            </div>
+
+            <div class="api-status">
+                <span class="status-dot"></span>
+                API Healthy
+            </div>
+        </header>
+
+        <section class="pipeline-card">
+
+            <div class="pipeline-info">
+                <div>
+                    <span class="label">Repository</span>
+                    <strong>payment-service</strong>
+                </div>
+
+                <div>
+                    <span class="label">Pipeline ID</span>
+                    <strong>#4812</strong>
+                </div>
+
+                <div>
+                    <span class="label">Status</span>
+                    <strong class="failed-status">FAILED</strong>
+                </div>
+            </div>
+
+            <button id="analyze-button">
+                Analyze Pipeline
+            </button>
+
+        </section>
+
+        <section class="analysis-section">
+            <section class="architecture-section">
+    <h2>How Pipeline Doctor Works</h2>
+
+    <div class="runtime-grid">
+        <div class="runtime-card">
+            <span>API</span>
+            <strong>FastAPI</strong>
+        </div>
+
+        <div class="runtime-card">
+            <span>Endpoint</span>
+            <strong>POST /analyze</strong>
+        </div>
+
+        <div class="runtime-card">
+            <span>Classifier</span>
+            <strong>Python rules</strong>
+        </div>
+
+        <div class="runtime-card">
+            <span>LLM</span>
+            <strong>Ollama / Qwen</strong>
+        </div>
+
+        <div class="runtime-card">
+            <span>Runtime</span>
+            <strong>Docker</strong>
+        </div>
+
+        <div class="runtime-card">
+            <span>CI</span>
+            <strong>GitHub Actions</strong>
+        </div>
+    </div>
+
+    <div class="flow-card">
+        <div class="flow-step">Browser</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">FastAPI</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Classifier</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Ollama</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">JSON</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Dashboard</div>
+    </div>
+</section>
+
+            <h2>Analysis Overview</h2>
+
+            <div class="stats">
+
+                <div class="stat-card">
+                    <span>Failed Jobs</span>
+                    <strong>2</strong>
+                </div>
+
+                <div class="stat-card">
+                    <span>Docker</span>
+                    <strong>1</strong>
+                </div>
+
+                <div class="stat-card">
+                    <span>Connection</span>
+                    <strong>1</strong>
+                </div>
+
+            </div>
+
+            <div id="results">
+                <p class="empty-state">
+                    Click Analyze Pipeline to investigate the failed jobs.
+                </p>
+            </div>
+
+        </section>
+
+    </main>
+
+    <script src="/static/app.js"></script>
+
+</body>
+</html>

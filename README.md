@@ -1,79 +1,265 @@
 # Pipeline Doctor
 
-Pipeline Doctor is a CI failure-analysis prototype built with Python, Docker, GitHub Actions, and a local Ollama LLM.
+**AI-assisted CI failure investigation that turns failed pipeline evidence into a structured troubleshooting report.**
 
-It reads a pipeline event, extracts failed jobs, classifies known failure patterns, asks an LLM for a structured investigation, and generates a final JSON analysis report.
+Pipeline Doctor is a portfolio project built with Python, FastAPI, Docker, GitHub Actions, JavaScript, and a local Ollama LLM.
 
-When executed through GitHub Actions, the generated report is uploaded as a workflow artifact.
+It accepts a pipeline event, extracts failed jobs, classifies known failure patterns, asks an LLM for structured troubleshooting guidance, and returns the result through a REST API. A browser dashboard consumes that API and renders the analysis dynamically.
 
-## Problem
+---
 
-CI failures often require engineers to manually inspect logs and identify the likely root cause.
+## Demo
 
-Pipeline Doctor helps by producing an initial investigation report containing:
+Pipeline Doctor includes a browser-based dashboard for investigating CI failures.
 
-- failure category
-- summary of what failed
-- likely root cause
-- practical troubleshooting suggestions
+The demo shows:
 
-The tool is designed to assist engineers, not replace human investigation.
+- failed pipeline information
+- FastAPI `POST /analyze`
+- rule-based failure classification
+- Ollama / Qwen analysis
+- structured troubleshooting results
+- HTTP response status
+- analysis duration
+- raw JSON API response
+
+![Pipeline Doctor demo](docs/demo/pipeline-doctor-demo.gif)
+
+[Watch higher-quality MP4](docs/demo/pipeline-doctor-demo.mp4)
+
+---
 
 ## Architecture
 
 ```text
-GitHub Actions
+Browser Dashboard
       |
-      | sends workflow job
+      | POST /analyze
       v
-Self-hosted Linux runner
-      |
-      | starts local pipeline event server
-      v
-pipeline_event.json on port 8000
-      |
-      | HTTP GET
-      v
-Pipeline Doctor Docker container
-      |
-      +----> Python rule-based classification
-      |
-      +----> Ollama API on port 11434
+FastAPI :8080
       |
       v
-pipeline_analysis.json
+Pipeline Doctor Core
       |
-      | upload-artifact
+      +----> Failed-job extraction
+      |
+      +----> Rule-based classifier
+      |
+      +----> Ollama / Qwen
+      |
       v
-GitHub Actions artifact
+Structured JSON response
+      |
+      v
+Browser renders analysis
 ```
+
+The application runs in Docker. Ollama currently runs on the development host and is reached from the container through `host.docker.internal:11434`.
+
+---
+
+## How the Analysis Works
+
+```text
+Pipeline Event
+      |
+      v
+Extract Failed Jobs
+      |
+      v
+Rule-based Classification
+      |
+      v
+LLM Analysis
+      |
+      v
+Structured JSON
+      |
+      v
+Web Dashboard
+```
+
+The classifier currently identifies common failure categories using deterministic Python rules.
+
+Examples:
+
+```text
+"copy failed"        -> docker_build
+"connection refused" -> connection
+"permission denied"  -> permission
+"assertionerror"      -> test_failure
+```
+
+The classifier is intentionally simple and deterministic. It is not a machine-learning classifier.
+
+The LLM is used for the less deterministic part of the investigation:
+
+- summarize the failure
+- suggest a likely root cause
+- generate troubleshooting actions
+
+---
+
+## Web Interface
+
+The frontend is currently implemented with HTML, CSS, and JavaScript.
+
+JavaScript calls the FastAPI backend using `fetch()`:
+
+```text
+Analyze Pipeline button
+        |
+        v
+JavaScript fetch()
+        |
+        | POST /analyze
+        v
+FastAPI
+        |
+        v
+Pipeline Doctor
+        |
+        v
+JSON response
+        |
+        v
+Dynamic dashboard rendering
+```
+
+The dashboard displays:
+
+- repository
+- pipeline ID
+- pipeline status
+- failed-job count
+- failure categories
+- original failure log
+- analysis summary
+- likely root cause
+- recommended actions
+- API HTTP status
+- analysis duration
+- model information
+- raw API response
+
+---
+
+## API
+
+### Health Check
+
+```http
+GET /health
+```
+
+Example response:
+
+```json
+{
+  "status": "healthy"
+}
+```
+
+### Analyze Pipeline
+
+```http
+POST /analyze
+Content-Type: application/json
+```
+
+The endpoint accepts a pipeline event and returns structured failure analysis.
+
+---
+
+## Example Pipeline Event
+
+```json
+{
+  "pipeline_id": 4812,
+  "repository": "payment-service",
+  "status": "failed",
+  "jobs": [
+    {
+      "name": "unit-tests",
+      "status": "passed",
+      "duration_seconds": 48
+    },
+    {
+      "name": "docker-build",
+      "status": "failed",
+      "duration_seconds": 32,
+      "log": "COPY failed: requirements.txt not found"
+    },
+    {
+      "name": "integration-tests",
+      "status": "failed",
+      "duration_seconds": 61,
+      "log": "Connection refused: database:5432"
+    }
+  ]
+}
+```
+
+Pipeline Doctor extracts only the failed jobs for analysis.
+
+---
+
+## Example Analysis
+
+```json
+{
+  "name": "docker-build",
+  "log": "COPY failed: requirements.txt not found",
+  "category": "docker_build",
+  "analysis_status": "success",
+  "analysis": {
+    "summary": "The Docker build failed because requirements.txt could not be copied.",
+    "likely_root_cause": "The file may not be available in the Docker build context or the COPY path may be incorrect.",
+    "suggestions": [
+      "Verify that requirements.txt exists in the expected location.",
+      "Check the Dockerfile COPY path.",
+      "Inspect the Docker build context."
+    ]
+  }
+}
+```
+
+LLM-generated root causes are troubleshooting hypotheses and should be validated against real evidence.
+
+---
 
 ## GitHub Actions Workflow
 
-The workflow runs Pipeline Doctor on a self-hosted Linux runner.
+Pipeline Doctor also runs through GitHub Actions using a self-hosted Linux runner.
 
-The current execution flow is:
+Current workflow:
 
 ```text
-Checkout repository
-        |
-        v
-Start pipeline event HTTP server
-        |
-        v
-Verify pipeline_event.json
-        |
-        v
-Build and run Pipeline Doctor container
-        |
-        v
-Analyze failed jobs
-        |
-        v
-Generate pipeline_analysis.json
-        |
-        v
-Upload analysis report as artifact
+workflow_dispatch
+      |
+      v
+Self-hosted Linux Runner
+      |
+      v
+Checkout Repository
+      |
+      v
+docker compose up -d --build
+      |
+      v
+Wait for GET /health
+      |
+      v
+POST pipeline_event.json to /analyze
+      |
+      v
+Generate analysis report
+      |
+      v
+Upload GitHub Actions artifact
+      |
+      v
+Collect logs and stop containers
 ```
 
 ### Trigger
@@ -85,76 +271,13 @@ on:
   workflow_dispatch:
 ```
 
-This means pushing code does not automatically execute Pipeline Doctor. The workflow is started manually from GitHub Actions.
+This means the workflow is started manually from GitHub Actions. Automatic `push` or `pull_request` triggers can be added later.
 
-## Pipeline Event
-
-For the current prototype, Pipeline Doctor uses a sample pipeline event.
-
-Example:
-
-```json
-{
-  "pipeline_id": 4812,
-  "repository": "payment-service",
-  "status": "failed",
-  "jobs": [
-    {
-      "name": "unit-tests",
-      "status": "passed",
-      "log": "48 tests passed"
-    },
-    {
-      "name": "docker-build",
-      "status": "failed",
-      "log": "COPY failed: requirements.txt not found"
-    },
-    {
-      "name": "integration-tests",
-      "status": "failed",
-      "log": "Connection refused: database:5432"
-    }
-  ]
-}
-```
-
-Pipeline Doctor extracts only the failed jobs and sends their failure information for analysis.
-
-## Example Analysis
-
-A failed Docker build can produce an analysis such as:
-
-```json
-{
-  "name": "docker-build",
-  "log": "COPY failed: requirements.txt not found",
-  "category": "docker_build",
-  "analysis_status": "success",
-  "analysis": {
-    "summary": "The Docker build could not find requirements.txt.",
-    "likely_root_cause": "The file is missing from the build context or the COPY path is incorrect.",
-    "suggestions": [
-      "Verify that requirements.txt exists.",
-      "Check the Dockerfile COPY path.",
-      "Inspect the Docker build context."
-    ]
-  }
-}
-```
+---
 
 ## Run Locally
 
-### 1. Start the sample pipeline event server
-
-From the project directory:
-
-```bash
-python3 -m http.server 8000
-```
-
-The sample pipeline event is then available on port `8000`.
-
-### 2. Make sure Ollama is running
+### 1. Make sure Ollama is running
 
 Pipeline Doctor currently uses:
 
@@ -162,83 +285,167 @@ Pipeline Doctor currently uses:
 qwen2.5-coder:7b
 ```
 
-through the local Ollama API on port `11434`.
-
-### 3. Run Pipeline Doctor with Docker Compose
+Verify Ollama:
 
 ```bash
-docker compose run --rm --build pipeline-doctor
+curl http://localhost:11434/api/tags
 ```
 
-Docker Compose configures the container so it can communicate with the pipeline event server and Ollama running on the host machine.
-
-### 4. Check the generated report
+### 2. Start Pipeline Doctor
 
 ```bash
-python3 -m json.tool output/pipeline_analysis.json
+docker compose up -d --build
 ```
 
-The report contains the failed jobs and their generated analysis.
+Check the container:
 
-## Current Prototype Scope
+```bash
+docker compose ps
+```
 
-The current implementation focuses on demonstrating the complete CI failure-analysis flow:
+### 3. Verify FastAPI
+
+```bash
+curl http://localhost:8080/health
+```
+
+Expected:
+
+```json
+{
+  "status": "healthy"
+}
+```
+
+### 4. Open the Dashboard
+
+Open:
 
 ```text
-Pipeline event
-      ↓
-Failed-job extraction
-      ↓
-Failure classification
-      ↓
-LLM analysis
-      ↓
-Structured JSON report
-      ↓
-GitHub Actions artifact
+http://localhost:8080
 ```
+
+Click **Analyze Pipeline**. The browser sends the pipeline event to `POST /analyze` and dynamically displays the returned analysis.
+
+### 5. Call the API Directly
+
+```bash
+curl --silent --show-error --fail \
+  -X POST \
+  http://localhost:8080/analyze \
+  -H "Content-Type: application/json" \
+  --data @pipeline_event.json \
+  | python3 -m json.tool
+```
+
+---
+
+## Docker Runtime
+
+The Docker image contains the FastAPI backend and frontend assets:
+
+```text
+api.py
+pipeline_doctor.py
+templates/
+static/
+```
+
+FastAPI serves:
+
+```text
+GET /
+-> web dashboard
+
+GET /static/*
+-> CSS and JavaScript
+
+GET /health
+-> health API
+
+POST /analyze
+-> pipeline analysis API
+```
+
+The application container communicates with Ollama using:
+
+```text
+http://host.docker.internal:11434
+```
+
+---
 
 ## Technologies Used
 
-- **Python** — pipeline event processing, failed-job extraction, failure classification, and LLM integration
-- **Requests** — communication with the pipeline event server and Ollama API
+- **Python** — backend and CI failure-analysis logic
+- **FastAPI** — REST API and web application server
+- **HTML / CSS / JavaScript** — browser dashboard
+- **Requests** — HTTP communication with Ollama
 - **Ollama** — local LLM runtime
-- **Qwen2.5-Coder 7B** — analyzes CI failure logs and generates troubleshooting suggestions
-- **Docker** — packages Pipeline Doctor into a reproducible container
-- **Docker Compose** — configures and runs the container locally
-- **GitHub Actions** — executes the analysis workflow
-- **Self-hosted GitHub Actions Runner** — runs the workflow with access to local Docker and Ollama
-- **JSON** — pipeline event input and structured analysis output
-- **Python HTTP Server** — temporarily serves the sample pipeline event during the prototype stage
+- **Qwen2.5-Coder 7B** — troubleshooting analysis
+- **Docker** — application packaging
+- **Docker Compose** — local service execution
+- **GitHub Actions** — CI workflow
+- **Self-hosted GitHub Actions Runner** — executes the workflow with Docker and Ollama access
+- **JSON** — pipeline input and structured analysis output
+
+---
+
+## Manual Agent Experiment
+
+The repository also contains a separate manual agent implementation under `manual_agent/`.
+
+It was built to understand agent mechanics before using an agent framework. The agent can choose between tools such as:
+
+```text
+search_log
+read_file
+list_files
+```
+
+The Python application controls:
+
+- allowed tools
+- tool execution
+- conversation state
+- duplicate tool-call prevention
+- maximum investigation steps
+
+The manual agent is currently an experimental component and is **not yet integrated into the main FastAPI `/analyze` flow**.
+
+---
 
 ## Current Limitations
 
-Pipeline Doctor is currently a working prototype rather than a production-ready system.
+Pipeline Doctor is currently a working portfolio prototype rather than a production service.
 
 Current limitations include:
 
-- The pipeline event is currently a static sample rather than being generated from a real CI failure.
-- The pipeline event is served using Python's temporary HTTP file server.
-- Ollama and the LLM run locally.
-- There is currently no API authentication or authorization.
-- CI logs are not scanned or redacted for secrets before LLM analysis.
-- LLM output validation is limited.
-- There is no retry strategy for failed API or LLM requests.
-- Large CI logs are not currently truncated or split into smaller sections.
-- The generated analysis report is currently JSON only.
-- The workflow currently uses a self-hosted runner and requires the local supporting services to be available.
+- pipeline events currently use sample CI data
+- Ollama runs locally
+- no API authentication or authorization
+- CI logs are not yet redacted for secrets before LLM analysis
+- LLM output validation is limited
+- retry handling needs improvement
+- large-log handling is limited
+- automated test coverage still needs to be expanded
+- the model name displayed by the frontend is currently not fully runtime-driven
+- the manual agent is not yet integrated into the main analysis flow
+
+---
 
 ## Planned Improvements
 
-Future improvements include:
+Planned improvements include:
 
-- Replace the temporary Python HTTP server with FastAPI.
-- Accept pipeline events through an API or webhook.
-- Collect real failure information from GitHub Actions, Jenkins, or GitLab pipelines.
-- Add schema validation for pipeline events and LLM responses.
-- Redact secrets and sensitive information before sending logs to the LLM.
-- Add retry and improved timeout handling for external requests.
-- Add support for large logs through truncation or relevant-log extraction.
-- Generate human-readable Markdown investigation reports in addition to JSON.
-- Add automated unit and integration tests.
-- Improve error handling and observability.
+- add reliable automated unit and API tests
+- add schema validation for API input and output
+- improve structured logging and error handling
+- add secret redaction before LLM processing
+- add retry and timeout handling
+- improve large-log extraction
+- return runtime model metadata from the backend
+- integrate agent-based investigation where useful
+- improve GitHub Actions integration with real failed workflow evidence
+- deploy Pipeline Doctor as a hosted service
+- optionally migrate the frontend to React + TypeScript for a larger production UI
