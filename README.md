@@ -19,6 +19,21 @@ Pipeline Doctor helps by producing an initial investigation report containing:
 
 The tool is designed to assist engineers, not replace human investigation.
 
+## Demo
+
+Pipeline Doctor provides a browser-based interface for investigating CI failures.
+
+The demo shows:
+
+- failed pipeline input
+- FastAPI `POST /analyze`
+- rule-based failure classification
+- Ollama/Qwen analysis
+- structured troubleshooting results
+- API status, duration, and raw JSON response
+
+[Watch the Pipeline Doctor demo](docs/demo/pipeline-doctor-demo.mp4)
+
 ## Architecture
 
 ```text

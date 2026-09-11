@@ -1,7 +1,13 @@
 import json
 import os
 
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
 from fastapi import FastAPI
+
+
 
 from pipeline_doctor import (
     analyze_all_failed_jobs,
@@ -19,6 +25,19 @@ app = FastAPI(
     title="Pipeline Doctor API",
     version="1.0.0",
 )
+
+BASE_DIR = Path(__file__).resolve().parent
+
+app.mount(
+    "/static",
+    StaticFiles(directory=BASE_DIR / "static"),
+    name="static"
+)
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    html_file = BASE_DIR / "templates" / "index.html"
+    return html_file.read_text()
 
 
 @app.get("/health")
