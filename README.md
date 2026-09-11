@@ -1,66 +1,57 @@
 # Pipeline Doctor
 
-Pipeline Doctor is a CI failure-analysis prototype built with Python, Docker, GitHub Actions, and a local Ollama LLM.
+**AI-assisted CI failure investigation that turns failed pipeline evidence into a structured troubleshooting report.**
 
-It reads a pipeline event, extracts failed jobs, classifies known failure patterns, asks an LLM for a structured investigation, and generates a final JSON analysis report.
+Pipeline Doctor is a portfolio project built with Python, FastAPI, Docker, GitHub Actions, JavaScript, and a local Ollama LLM.
 
-When executed through GitHub Actions, the generated report is uploaded as a workflow artifact.
+It accepts a pipeline event, extracts failed jobs, classifies known failure patterns, asks an LLM for structured troubleshooting guidance, and returns the result through a REST API.
 
-## Problem
+A browser dashboard consumes the API and renders the analysis dynamically.
 
-CI failures often require engineers to manually inspect logs and identify the likely root cause.
-
-Pipeline Doctor helps by producing an initial investigation report containing:
-
-- failure category
-- summary of what failed
-- likely root cause
-- practical troubleshooting suggestions
-
-The tool is designed to assist engineers, not replace human investigation.
+---
 
 ## Demo
 
-Pipeline Doctor provides a browser-based interface for investigating CI failures.
+Pipeline Doctor includes a browser-based dashboard for investigating CI failures.
 
 The demo shows:
 
-- failed pipeline input
+- failed pipeline information
 - FastAPI `POST /analyze`
 - rule-based failure classification
-- Ollama/Qwen analysis
+- Ollama / Qwen analysis
 - structured troubleshooting results
-- API status, duration, and raw JSON response
+- HTTP response status
+- analysis duration
+- raw JSON API response
 
 [Watch the Pipeline Doctor demo](docs/demo/pipeline-doctor-demo.mp4)
+
+---
 
 ## Architecture
 
 ```text
-GitHub Actions
+Browser Dashboard
       |
-      | sends workflow job
+      | POST /analyze
       v
-Self-hosted Linux runner
-      |
-      | starts local pipeline event server
-      v
-pipeline_event.json on port 8000
-      |
-      | HTTP GET
-      v
-Pipeline Doctor Docker container
-      |
-      +----> Python rule-based classification
-      |
-      +----> Ollama API on port 11434
+FastAPI :8080
       |
       v
-pipeline_analysis.json
+Pipeline Doctor Core
       |
-      | upload-artifact
+      +----> Failed-job extraction
+      |
+      +----> Rule-based classifier
+      |
+      +----> Ollama / Qwen
+      |
       v
-GitHub Actions artifact
+Structured JSON response
+      |
+      v
+Browser renders analysis
 ```
 
 ## GitHub Actions Workflow
