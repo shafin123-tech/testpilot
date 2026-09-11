@@ -25,7 +25,9 @@ The demo shows:
 - analysis duration
 - raw JSON API response
 
-[Watch the Pipeline Doctor demo](docs/demo/pipeline-doctor-demo.mp4)
+![Pipeline Doctor demo](docs/demo/pipeline-doctor-demo.gif)
+
+[Watch higher-quality MP4](docs/demo/pipeline-doctor-demo.mp4)
 
 ---
 
